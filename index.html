@@ -108,7 +108,9 @@
 
     .content {
       width: min(960px, 100%);
-      margin-left: clamp(0px, 5vw, 70px);
+      margin-left: clamp(0px, 2vw, 28px);
+      position: relative;
+      z-index: 3;
     }
 
     .name {
@@ -216,7 +218,7 @@
 </head>
 
 <body>
-  <canvas id="network"></canvas>
+  <canvas id="tech-bg"></canvas>
   <div class="grain"></div>
   <div class="ambient"></div>
   <div class="ambient two"></div>
@@ -247,99 +249,696 @@
   </main>
 
   <script>
-    const canvas = document.getElementById("network");
+    const canvas = document.getElementById("tech-bg");
     const ctx = canvas.getContext("2d");
 
-    let width;
-    let height;
-    let nodes = [];
-    const mouse = { x: null, y: null };
+    let width = 0;
+    let height = 0;
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-    function resize() {
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
-      createNodes();
+    let chips = [];
+    let traces = [];
+    let pulses = [];
+    let particles = [];
+    let components = [];
+
+    function resizeCanvas() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      setupScene();
     }
 
-    function createNodes() {
-      const count = Math.min(95, Math.floor((width * height) / 21000));
-      nodes = [];
+    function setupScene() {
+      const base = Math.max(82, Math.min(145, width * 0.085));
+
+      if (width > 900) {
+        chips = [
+          { x: width * 0.70, y: height * 0.34, size: base * 0.92 },
+          { x: width * 0.82, y: height * 0.52, size: base * 1.14 },
+          { x: width * 0.68, y: height * 0.70, size: base * 0.78 }
+        ];
+      } else {
+        chips = [
+          { x: width * 0.62, y: height * 0.27, size: base * 0.82 },
+          { x: width * 0.78, y: height * 0.49, size: base * 1.00 },
+          { x: width * 0.58, y: height * 0.70, size: base * 0.72 }
+        ];
+      }
+
+      traces = [];
+      pulses = [];
+      particles = [];
+      components = [];
+
+      createTraces();
+      createPulses();
+      createComponents();
+      createAmbientParticles();
+    }
+
+    function rand(min, max) {
+      return min + Math.random() * (max - min);
+    }
+
+    function roundRect(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    function createAmbientParticles() {
+      const count = Math.floor((width * height) / 26000);
 
       for (let i = 0; i < count; i++) {
-        nodes.push({
-          x: Math.random() * width,
-          y: Math.random() * height,
-          vx: (Math.random() - 0.5) * 0.35,
-          vy: (Math.random() - 0.5) * 0.35,
-          r: Math.random() * 1.8 + 0.8
+        particles.push({
+          x: rand(0, width),
+          y: rand(0, height),
+          r: rand(0.8, 1.7),
+          a: rand(0.08, 0.24),
+          vx: rand(-0.06, 0.06),
+          vy: rand(-0.04, 0.04)
         });
       }
     }
 
-    function draw() {
-      ctx.clearRect(0, 0, width, height);
-
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const a = nodes[i];
-          const b = nodes[j];
-          const dx = a.x - b.x;
-          const dy = a.y - b.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-
-          if (distance < 145) {
-            const opacity = (1 - distance / 145) * 0.26;
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
-            ctx.strokeStyle = `rgba(193, 180, 145, ${opacity})`;
-            ctx.lineWidth = 1;
-            ctx.stroke();
-          }
+    function createComponents() {
+      chips.forEach((chip, chipIndex) => {
+        const path = getMachinePathForChip(chip, chipIndex);
+        for (let i = 0; i < 4; i++) {
+          components.push({
+            chipIndex,
+            t: rand(-0.2, 0.9),
+            speed: rand(0.0007, 0.0012),
+            w: rand(9, 18),
+            h: rand(5, 9),
+            startX: path.conveyorStartX,
+            endX: path.conveyorEndX,
+            y: path.conveyorY + rand(-5, 5)
+          });
         }
-      }
-
-      for (const node of nodes) {
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(232, 224, 202, 0.72)";
-        ctx.fill();
-
-        node.x += node.vx;
-        node.y += node.vy;
-
-        if (node.x < 0 || node.x > width) node.vx *= -1;
-        if (node.y < 0 || node.y > height) node.vy *= -1;
-
-        if (mouse.x !== null) {
-          const dx = mouse.x - node.x;
-          const dy = mouse.y - node.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-
-          if (distance < 150) {
-            node.x -= dx * 0.0018;
-            node.y -= dy * 0.0018;
-          }
-        }
-      }
-
-      requestAnimationFrame(draw);
+      });
     }
 
-    window.addEventListener("mousemove", (event) => {
-      mouse.x = event.clientX;
-      mouse.y = event.clientY;
-    });
+    function getMachinePathForChip(chip, chipIndex) {
+      if (chipIndex === 1) {
+        return {
+          railY: chip.y - chip.size * 0.92,
+          railX1: chip.x - chip.size * 1.28,
+          railX2: chip.x + chip.size * 1.28,
+          conveyorY: chip.y + chip.size * 1.35,
+          conveyorStartX: chip.x + chip.size * 0.55,
+          conveyorEndX: chip.x + chip.size * 1.85
+        };
+      }
 
-    window.addEventListener("mouseleave", () => {
-      mouse.x = null;
-      mouse.y = null;
-    });
+      return {
+        railY: chip.y - chip.size * 0.92,
+        railX1: chip.x - chip.size * 1.28,
+        railX2: chip.x + chip.size * 1.28,
+        conveyorY: chip.y + chip.size * 0.88,
+        conveyorStartX: chip.x - chip.size * 1.55,
+        conveyorEndX: chip.x - chip.size * 0.50
+      };
+    }
 
-    window.addEventListener("resize", resize);
+    function createTraces() {
+      chips.forEach((chip, chipIndex) => {
+        const count = width > 900 ? 8 : 5;
+        const sides = ["left", "right", "top", "bottom"];
 
-    resize();
-    draw();
+        for (let i = 0; i < count; i++) {
+          traces.push(makeTrace(chip, sides[i % sides.length], chipIndex));
+        }
+      });
+
+      for (let i = 0; i < chips.length - 1; i++) {
+        traces.push(makeChipToChipTrace(chips[i], chips[i + 1], i));
+      }
+
+      traces.push(makeChipToChipTrace(chips[2], chips[0], 2));
+    }
+
+    function makeTrace(chip, side, chipIndex) {
+      const s = chip.size;
+      const left = chip.x - s / 2;
+      const right = chip.x + s / 2;
+      const top = chip.y - s / 2;
+      const bottom = chip.y + s / 2;
+
+      let start, end, bend1, bend2;
+
+      if (side === "left") {
+        start = { x: rand(Math.max(30, left - s * 1.9), left - s * 0.75), y: rand(55, height - 55) };
+        end = { x: left - 8, y: rand(top + 10, bottom - 10) };
+        bend1 = { x: rand(start.x + 20, left - s * 0.42), y: start.y };
+        bend2 = { x: bend1.x, y: end.y };
+      } else if (side === "right") {
+        start = { x: rand(right + s * 0.8, Math.min(width - 35, right + s * 2.2)), y: rand(55, height - 55) };
+        end = { x: right + 8, y: rand(top + 10, bottom - 10) };
+        bend1 = { x: rand(right + s * 0.42, start.x - 20), y: start.y };
+        bend2 = { x: bend1.x, y: end.y };
+      } else if (side === "top") {
+        start = { x: rand(Math.max(35, chip.x - s * 1.7), Math.min(width - 35, chip.x + s * 1.7)), y: rand(35, Math.max(45, top - s * 0.9)) };
+        end = { x: rand(left + 10, right - 10), y: top - 8 };
+        bend1 = { x: start.x, y: rand(start.y + 20, Math.max(start.y + 22, top - s * 0.4)) };
+        bend2 = { x: end.x, y: bend1.y };
+      } else {
+        start = { x: rand(Math.max(35, chip.x - s * 1.7), Math.min(width - 35, chip.x + s * 1.7)), y: rand(Math.min(height - 45, bottom + s * 0.8), height - 35) };
+        end = { x: rand(left + 10, right - 10), y: bottom + 8 };
+        bend1 = { x: start.x, y: rand(Math.min(height - 40, bottom + s * 0.38), start.y - 20) };
+        bend2 = { x: end.x, y: bend1.y };
+      }
+
+      return {
+        chipIndex,
+        points: [start, bend1, bend2, end],
+        totalLength: 0
+      };
+    }
+
+    function makeChipToChipTrace(a, b, index) {
+      const midX = (a.x + b.x) / 2 + rand(-20, 20);
+      const midY = (a.y + b.y) / 2 + rand(-18, 18);
+
+      return {
+        chipIndex: index,
+        points: [
+          { x: a.x, y: a.y },
+          { x: midX, y: a.y },
+          { x: midX, y: midY },
+          { x: b.x, y: midY },
+          { x: b.x, y: b.y }
+        ],
+        totalLength: 0,
+        interChip: true
+      };
+    }
+
+    function createPulses() {
+      traces.forEach((trace, i) => {
+        trace.totalLength = polylineLength(trace.points);
+        const pulseCount = trace.interChip ? 2 : 1;
+
+        for (let j = 0; j < pulseCount; j++) {
+          pulses.push({
+            traceIndex: i,
+            offset: Math.random(),
+            speed: trace.interChip ? rand(0.00012, 0.00022) : rand(0.00008, 0.00016)
+          });
+        }
+      });
+    }
+
+    function polylineLength(points) {
+      let len = 0;
+      for (let i = 1; i < points.length; i++) {
+        len += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+      }
+      return len;
+    }
+
+    function pointOnPolyline(points, t) {
+      const total = polylineLength(points);
+      let target = total * t;
+      let traversed = 0;
+
+      for (let i = 1; i < points.length; i++) {
+        const a = points[i - 1];
+        const b = points[i];
+        const seg = Math.hypot(b.x - a.x, b.y - a.y);
+
+        if (traversed + seg >= target) {
+          const local = (target - traversed) / seg;
+          return {
+            x: a.x + (b.x - a.x) * local,
+            y: a.y + (b.y - a.y) * local
+          };
+        }
+
+        traversed += seg;
+      }
+
+      return points[points.length - 1];
+    }
+
+    function drawBoardGrid() {
+      ctx.save();
+
+      const spacing = 42;
+      ctx.strokeStyle = "rgba(242, 240, 232, 0.028)";
+      ctx.lineWidth = 1;
+
+      for (let x = 0; x <= width; x += spacing) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+      }
+
+      for (let y = 0; y <= height; y += spacing) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = "rgba(193, 180, 145, 0.035)";
+      for (let i = -height; i < width; i += 90) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i + height, height);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function drawCircuitZones() {
+      ctx.save();
+
+      chips.forEach((chip) => {
+        const s = chip.size;
+        const zones = [
+          { x: chip.x - s * 1.75, y: chip.y - s * 1.18, w: s * 0.86, h: s * 0.42 },
+          { x: chip.x + s * 0.90, y: chip.y + s * 0.70, w: s * 0.92, h: s * 0.46 }
+        ];
+
+        zones.forEach(z => {
+          roundRect(z.x, z.y, z.w, z.h, 10);
+          ctx.fillStyle = "rgba(255,255,255,0.015)";
+          ctx.fill();
+          ctx.strokeStyle = "rgba(193, 180, 145, 0.07)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          for (let j = 12; j < z.w - 12; j += 13) {
+            ctx.beginPath();
+            ctx.moveTo(z.x + j, z.y);
+            ctx.lineTo(z.x + j, z.y - 5);
+            ctx.strokeStyle = "rgba(193, 180, 145, 0.08)";
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(z.x + j, z.y + z.h);
+            ctx.lineTo(z.x + j, z.y + z.h + 5);
+            ctx.stroke();
+          }
+        });
+      });
+
+      ctx.restore();
+    }
+
+    function drawTraces(time) {
+      ctx.save();
+
+      traces.forEach(trace => {
+        const pts = trace.points;
+
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) {
+          ctx.lineTo(pts[i].x, pts[i].y);
+        }
+
+        ctx.strokeStyle = trace.interChip
+          ? "rgba(193, 180, 145, 0.17)"
+          : "rgba(193, 180, 145, 0.105)";
+        ctx.lineWidth = trace.interChip ? 2.2 : 1.8;
+        ctx.stroke();
+
+        pts.forEach((p, idx) => {
+          if (idx < pts.length - 1) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, trace.interChip ? 2.4 : 1.9, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(232, 224, 202, 0.25)";
+            ctx.fill();
+          }
+        });
+      });
+
+      pulses.forEach(pulse => {
+        const trace = traces[pulse.traceIndex];
+        const t = ((time * pulse.speed) + pulse.offset) % 1;
+        const pos = pointOnPolyline(trace.points, t);
+        const prev = pointOnPolyline(trace.points, Math.max(0, t - 0.04));
+
+        const grad = ctx.createLinearGradient(prev.x, prev.y, pos.x, pos.y);
+        grad.addColorStop(0, "rgba(193,180,145,0)");
+        grad.addColorStop(1, "rgba(232,224,202,0.95)");
+
+        ctx.beginPath();
+        ctx.moveTo(prev.x, prev.y);
+        ctx.lineTo(pos.x, pos.y);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = trace.interChip ? 3.2 : 2.6;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, trace.interChip ? 3.2 : 2.7, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(232,224,202,0.95)";
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = "rgba(232,224,202,0.9)";
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      });
+
+      ctx.restore();
+    }
+
+    function drawChip(chip, time, index) {
+      const s = chip.size;
+      const x = chip.x - s / 2;
+      const y = chip.y - s / 2;
+      const pulse = 0.5 + 0.5 * Math.sin(time * 0.0022 + index * 1.4);
+
+      ctx.save();
+
+      ctx.shadowColor = "rgba(193, 180, 145, 0.14)";
+      ctx.shadowBlur = 28;
+      roundRect(x - 5, y - 5, s + 10, s + 10, 15);
+      ctx.fillStyle = "rgba(193, 180, 145, 0.035)";
+      ctx.fill();
+
+      roundRect(x, y, s, s, 14);
+      const chipGrad = ctx.createLinearGradient(x, y, x + s, y + s);
+      chipGrad.addColorStop(0, "rgba(24, 26, 24, 0.98)");
+      chipGrad.addColorStop(1, "rgba(11, 12, 11, 0.98)");
+      ctx.fillStyle = chipGrad;
+      ctx.fill();
+      ctx.strokeStyle = "rgba(193,180,145,0.18)";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      const innerPad = s * 0.17;
+      roundRect(x + innerPad, y + innerPad, s - innerPad * 2, s - innerPad * 2, 10);
+      ctx.fillStyle = "rgba(255,255,255,0.018)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(242,240,232,0.06)";
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(x + innerPad + 9, y + innerPad + s * 0.13);
+      ctx.lineTo(x + s - innerPad - 9, y + innerPad + s * 0.13);
+      ctx.strokeStyle = "rgba(193,180,145,0.105)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(x + innerPad + 9, y + s - innerPad - s * 0.13);
+      ctx.lineTo(x + s - innerPad - 9, y + s - innerPad - s * 0.13);
+      ctx.stroke();
+
+      const pinCount = 7;
+      const pinGap = s / (pinCount + 1);
+
+      for (let i = 1; i <= pinCount; i++) {
+        const px = x + pinGap * i;
+        const py = y + pinGap * i;
+
+        roundRect(px - 3.2, y - 8, 6.4, 8, 2);
+        ctx.fillStyle = "rgba(205,195,165,0.8)";
+        ctx.fill();
+
+        roundRect(px - 3.2, y + s, 6.4, 8, 2);
+        ctx.fill();
+
+        roundRect(x - 8, py - 3.2, 8, 6.4, 2);
+        ctx.fill();
+
+        roundRect(x + s, py - 3.2, 8, 6.4, 2);
+        ctx.fill();
+      }
+
+      roundRect(x + s * 0.32, y + s * 0.32, s * 0.36, s * 0.36, 9);
+      ctx.fillStyle = `rgba(193,180,145,${0.045 + pulse * 0.04})`;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(232,224,202,${0.11 + pulse * 0.08})`;
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawAllChips(time) {
+      chips.forEach((chip, index) => drawChip(chip, time, index));
+    }
+
+    function drawAssemblyMachines(time) {
+      chips.forEach((chip, index) => {
+        const path = getMachinePathForChip(chip, index);
+        const s = chip.size;
+
+        const railY = path.railY;
+        const railX1 = path.railX1;
+        const railX2 = path.railX2;
+
+        const machineCycle = time * (0.00085 + index * 0.00006) + index * 1.7;
+        const carriageX = chip.x + Math.sin(machineCycle) * (s * 0.56);
+        const armBaseY = railY + 8;
+        const armTipY = chip.y - s * 0.55 + Math.sin(time * 0.0022 + index) * 5;
+
+        ctx.save();
+
+        ctx.beginPath();
+        ctx.moveTo(railX1, railY);
+        ctx.lineTo(railX2, railY);
+        ctx.strokeStyle = "rgba(193,180,145,0.19)";
+        ctx.lineWidth = 4;
+        ctx.stroke();
+
+        [railX1, railX2].forEach(rx => {
+          ctx.beginPath();
+          ctx.moveTo(rx, railY);
+          ctx.lineTo(rx, railY - 20);
+          ctx.strokeStyle = "rgba(193,180,145,0.12)";
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        });
+
+        roundRect(carriageX - 22, railY - 13, 44, 20, 7);
+        ctx.fillStyle = "rgba(33, 35, 33, 0.94)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(193,180,145,0.22)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(carriageX, armBaseY);
+        ctx.lineTo(carriageX, armTipY);
+        ctx.strokeStyle = "rgba(193,180,145,0.34)";
+        ctx.lineWidth = 2.4;
+        ctx.stroke();
+
+        roundRect(carriageX - 10, armTipY - 8, 20, 14, 5);
+        ctx.fillStyle = "rgba(28,30,28,0.95)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(193,180,145,0.22)";
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(carriageX, armTipY + 5);
+        ctx.lineTo(carriageX, armTipY + 19);
+        ctx.strokeStyle = "rgba(232,224,202,0.43)";
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(carriageX, armTipY + 19, 3.4, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(232,224,202,0.9)";
+        ctx.shadowBlur = 14;
+        ctx.shadowColor = "rgba(232,224,202,0.85)";
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        const beamAlpha = 0.065 + 0.05 * (0.5 + 0.5 * Math.sin(time * 0.0032 + index));
+        ctx.beginPath();
+        ctx.moveTo(carriageX, armTipY + 19);
+        ctx.lineTo(chip.x, chip.y - s * 0.14);
+        ctx.strokeStyle = `rgba(193,180,145,${beamAlpha})`;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+
+        ctx.restore();
+      });
+
+      drawInterChipMover(time);
+    }
+
+    function drawInterChipMover(time) {
+      const sequence = [chips[0], chips[1], chips[2], chips[0]];
+      if (sequence.some(chip => !chip)) return;
+
+      const cycle = (time * 0.00018) % 3;
+      const index = Math.floor(cycle);
+      const localT = cycle - index;
+      const smoothT = localT * localT * (3 - 2 * localT);
+
+      const a = sequence[index];
+      const b = sequence[index + 1];
+
+      const x = a.x + (b.x - a.x) * smoothT;
+      const y = a.y + (b.y - a.y) * smoothT - 34;
+
+      ctx.save();
+
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y - a.size * 0.72);
+      ctx.quadraticCurveTo((a.x + b.x) / 2, Math.min(a.y, b.y) - 88, b.x, b.y - b.size * 0.72);
+      ctx.strokeStyle = "rgba(193,180,145,0.085)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      roundRect(x - 19, y - 10, 38, 20, 7);
+      ctx.fillStyle = "rgba(33, 35, 33, 0.96)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(193,180,145,0.32)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(x, y + 10);
+      ctx.lineTo(x, y + 34);
+      ctx.strokeStyle = "rgba(193,180,145,0.42)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(x, y + 35, 3.8, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(232,224,202,0.92)";
+      ctx.shadowBlur = 16;
+      ctx.shadowColor = "rgba(232,224,202,0.9)";
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      const targetChip = localT < 0.5 ? a : b;
+      ctx.beginPath();
+      ctx.moveTo(x, y + 35);
+      ctx.lineTo(targetChip.x, targetChip.y);
+      ctx.strokeStyle = "rgba(193,180,145,0.075)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawConveyors() {
+      chips.forEach((chip, chipIndex) => {
+        const path = getMachinePathForChip(chip, chipIndex);
+        const baseY = path.conveyorY;
+        const startX = path.conveyorStartX;
+        const endX = path.conveyorEndX;
+        const beltW = endX - startX;
+        const beltH = Math.max(14, chip.size * 0.13);
+
+        ctx.save();
+
+        roundRect(startX, baseY - beltH / 2, beltW, beltH, 9);
+        ctx.fillStyle = "rgba(255,255,255,0.022)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(193,180,145,0.075)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        for (let i = 0; i < 6; i++) {
+          const x = startX + (i / 6) * beltW;
+          ctx.beginPath();
+          ctx.moveTo(x, baseY - beltH * 0.28);
+          ctx.lineTo(x + 14, baseY - beltH * 0.28);
+          ctx.strokeStyle = "rgba(193,180,145,0.07)";
+          ctx.lineWidth = 1.6;
+          ctx.stroke();
+        }
+
+        components
+          .filter(c => c.chipIndex === chipIndex)
+          .forEach(c => {
+            c.t += c.speed;
+            if (c.t > 1.05) c.t = -0.15;
+
+            const x = c.startX + (c.endX - c.startX) * c.t;
+
+            roundRect(x, c.y - c.h / 2, c.w, c.h, 2.5);
+            ctx.fillStyle = "rgba(205,195,165,0.78)";
+            ctx.fill();
+            ctx.strokeStyle = "rgba(255,255,255,0.13)";
+            ctx.lineWidth = 0.6;
+            ctx.stroke();
+          });
+
+        ctx.restore();
+      });
+    }
+
+    function drawAmbientParticles() {
+      ctx.save();
+
+      particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.x < 0) p.x = width;
+        if (p.x > width) p.x = 0;
+        if (p.y < 0) p.y = height;
+        if (p.y > height) p.y = 0;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(232,224,202,${p.a})`;
+        ctx.fill();
+      });
+
+      ctx.restore();
+    }
+
+    function drawFocusVignette() {
+      chips.forEach(chip => {
+        const grad = ctx.createRadialGradient(
+          chip.x, chip.y, chip.size * 0.45,
+          chip.x, chip.y, chip.size * 3.2
+        );
+        grad.addColorStop(0, "rgba(193,180,145,0.045)");
+        grad.addColorStop(1, "rgba(193,180,145,0)");
+
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, width, height);
+      });
+    }
+
+    function animate(time) {
+      ctx.clearRect(0, 0, width, height);
+
+      drawBoardGrid();
+      drawCircuitZones();
+      drawFocusVignette();
+      drawTraces(time);
+      drawConveyors();
+      drawAssemblyMachines(time);
+      drawAllChips(time);
+      drawAmbientParticles();
+
+      requestAnimationFrame(animate);
+    }
+
+    window.addEventListener("resize", resizeCanvas);
+
+    resizeCanvas();
+    requestAnimationFrame(animate);
   </script>
 </body>
 </html>
